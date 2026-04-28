@@ -1,0 +1,68 @@
+---
+- name: run jhub container in podman 
+  hosts: localhost
+  connection: local
+  become: false
+
+  vars:
+    quadlet_dir: "{{ ansible_env.HOME }}/.config/containers/systemd"
+    container_name: jupyter
+    image: docker.io/jupyter/base-notebook
+    host_port: 8888
+    container_port: 8888
+    workdir: "{{ ansible_env.HOME }}/jupyter-work"
+
+  tasks:
+    - name: Ensure Podman is installed
+      become: true
+      ansible.builtin.dnf:
+        name: podman
+        state: present
+
+    - name: Enable lingering for user (required for boot start)
+      become: true
+      ansible.builtin.command:
+        cmd: "loginctl enable-linger {{ ansible_user_id }}"
+      register: linger_result
+      changed_when: linger_result.rc == 0
+
+    - name: Create Jupyter work directory
+      ansible.builtin.file:
+        path: "{{ workdir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create Quadlet directory
+      ansible.builtin.file:
+        path: "{{ quadlet_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create Quadlet container file
+      ansible.builtin.copy:
+        dest: "{{ quadlet_dir }}/{{ container_name }}.container"
+        mode: "0644"
+        content: |
+          [Container]
+          Image={{ image }}
+          Name={{ container_name }}
+          PublishPort={{ host_port }}:{{ container_port }}
+          Volume={{ workdir }}:/home/jovyan/work:Z
+
+          [Service]
+          Restart=always
+
+          [Install]
+          WantedBy=default.target
+
+    - name: Reload systemd user units
+      ansible.builtin.command:
+        cmd: systemctl --user daemon-reexec
+
+    - name: Enable Quadlet container
+      ansible.builtin.command:
+        cmd: systemctl --user enable {{ container_name }}.container
+
+    - name: Start Quadlet container
+      ansible.builtin.command:
+        cmd: systemctl --user start {{ container_name }}.container
