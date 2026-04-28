@@ -2,7 +2,7 @@
 - name: run jhub container in podman 
   hosts: localhost
   connection: local
-  become: false
+  become: true
 
   vars:
     quadlet_dir: "{{ ansible_env.HOME }}/.config/containers/systemd"
@@ -14,7 +14,6 @@
 
   tasks:
     - name: Ensure Podman is installed
-      become: true
       ansible.builtin.package:
         name: 
         - podman
@@ -29,18 +28,24 @@
       changed_when: linger_result.rc == 0
 
     - name: Create Jupyter work directory
+      become: true
+      become_user: rocky
       ansible.builtin.file:
         path: "{{ workdir }}"
         state: directory
         mode: "0755"
 
     - name: Create Quadlet directory
+      become: true
+      become_user: rocky
       ansible.builtin.file:
         path: "{{ quadlet_dir }}"
         state: directory
         mode: "0755"
 
     - name: Create Quadlet container file
+      become: true
+      become_user: rocky
       ansible.builtin.copy:
         dest: "{{ quadlet_dir }}/{{ container_name }}.container"
         mode: "0644"
@@ -58,14 +63,20 @@
           WantedBy=default.target
 
     - name: Reload systemd user units
+      become: true
+      become_user: rocky
       ansible.builtin.command: > 
         machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl --user daemon-reexec
 
     - name: Enable Quadlet container
+      become: true
+      become_user: rocky
       ansible.builtin.command: > 
         machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl enable jupyter.container
 
     - name: Start Quadlet container
+      become: true
+      become_user: rocky
       ansible.builtin.command: > 
         machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl start jupyter.container
 
