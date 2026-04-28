@@ -15,8 +15,10 @@
   tasks:
     - name: Ensure Podman is installed
       become: true
-      ansible.builtin.dnf:
-        name: podman
+      ansible.builtin.package:
+        name: 
+        - podman
+        - systemd-container
         state: present
 
     - name: Enable lingering for user (required for boot start)
@@ -56,13 +58,14 @@
           WantedBy=default.target
 
     - name: Reload systemd user units
-      ansible.builtin.command:
-        cmd: systemctl --user daemon-reexec
+      ansible.builtin.command: > 
+        machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl --user daemon-reexec
 
     - name: Enable Quadlet container
-      ansible.builtin.command:
-        cmd: systemctl --user enable {{ container_name }}.container
+      ansible.builtin.command: > 
+        machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl enable jupyter.container
 
     - name: Start Quadlet container
-      ansible.builtin.command:
-        cmd: systemctl --user start {{ container_name }}.container
+      ansible.builtin.command: > 
+        machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl start jupyter.container
+
