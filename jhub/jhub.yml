@@ -5,12 +5,15 @@
   become: true
 
   vars:
-    quadlet_dir: "{{ ansible_env.HOME }}/.config/containers/systemd"
+
+    local_user: rocky
+    local_user_uid: 1000
+    systemd_dir: "/home/{{ local_user }}/.config/systemd/user"
     container_name: jupyter
     image: docker.io/jupyter/base-notebook
     host_port: 8888
     container_port: 8888
-    workdir: "{{ ansible_env.HOME }}/jupyter-work"
+    workdir: "/home/{{ local_user }}/jupyter-work"
 
   tasks:
     - name: Ensure Podman is installed
@@ -20,63 +23,53 @@
         - systemd-container
         state: present
 
-    - name: Enable lingering for user (required for boot start)
-      become: true
-      ansible.builtin.command:
-        cmd: "loginctl enable-linger {{ ansible_user_id }}"
-      register: linger_result
-      changed_when: linger_result.rc == 0
-
     - name: Create Jupyter work directory
-      become: true
-      become_user: rocky
+      become_user: "{{ local_user }}"
       ansible.builtin.file:
         path: "{{ workdir }}"
         state: directory
         mode: "0755"
 
-    - name: Create Quadlet directory
-      become: true
-      become_user: rocky
+    - name: Create user systemd directory
+      become_user: "{{ local_user }}"
       ansible.builtin.file:
-        path: "{{ quadlet_dir }}"
+        path: "{{ systemd_dir }}"
         state: directory
         mode: "0755"
 
-    - name: Create Quadlet container file
-      become: true
-      become_user: rocky
+    - name: Create systemd file
+      become_user: "{{ local_user }}"
       ansible.builtin.copy:
-        dest: "{{ quadlet_dir }}/{{ container_name }}.container"
+        dest: "{{ systemd_dir }}/{{ container_name }}.service"
         mode: "0644"
         content: |
-          [Container]
-          Image={{ image }}
-          Name={{ container_name }}
-          PublishPort={{ host_port }}:{{ container_port }}
-          Volume={{ workdir }}:/home/jovyan/work:Z
+          [Unit]
+          Description=Jupyter service (container)
 
           [Service]
+          Type=simple
+          ExecStart=/usr/bin/podman run --rm --name {{ container_name }} -p 8888:8888 --volume /home/rocky/jupyter-work:/home/jovyan/work docker.io/jupyter/base-notebook
           Restart=always
-
+          RestartSec=10
+         
           [Install]
           WantedBy=default.target
 
     - name: Reload systemd user units
-      become: true
-      become_user: rocky
-      ansible.builtin.command: > 
-        machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl --user daemon-reexec
+      become_user: "{{ local_user }}"
+      ansible.builtin.command: systemctl --user daemon-reload
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ local_user_uid }}"
 
-    - name: Enable Quadlet container
-      become: true
-      become_user: rocky
-      ansible.builtin.command: > 
-        machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl enable jupyter.container
+    - name: Enable container
+      become_user: "{{ local_user }}"
+      ansible.builtin.command: systemctl --user enable jupyter.service
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ local_user_uid }}"
 
-    - name: Start Quadlet container
-      become: true
-      become_user: rocky
-      ansible.builtin.command: > 
-        machinectl shell {{ ansible_user_id }}@.host /usr/bin/systemctl start jupyter.container
+    - name: Start container
+      become_user: "{{ local_user }}"
+      ansible.builtin.command: systemctl --user start jupyter.service
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ local_user_uid }}"
 
