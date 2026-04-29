@@ -1,0 +1,7 @@
+---
+- name: install and start vscode server
+  hosts: localhost
+  connection: local
+  become: true
+
+  tasks:
